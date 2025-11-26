@@ -6,3 +6,4 @@ django-filter
 python-decouple
 whitenoise
 pillow
+gunicorn
