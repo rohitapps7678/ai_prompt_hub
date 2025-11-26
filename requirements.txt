@@ -1,0 +1,8 @@
+Django>=5.0
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+django-filter
+python-decouple
+whitenoise
+pillow
