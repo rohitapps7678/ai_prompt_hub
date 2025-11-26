@@ -1,5 +1,8 @@
+# prompts_app/models.py
+
 from django.db import models
 import uuid
+
 
 class Category(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -11,6 +14,7 @@ class Category(models.Model):
 
     class Meta:
         ordering = ['order', 'name']
+
     def __str__(self):
         return self.name
 
@@ -19,12 +23,15 @@ class Prompt(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=200)
     prompt_text = models.TextField()
-    image = models.ImageField(upload_to='prompts/', blank=True, null=True)  # NAYA
+
+    # CLOUDINARY IMAGE URL - Sirf string URL save hoga
+    image_url = models.URLField(max_length=500, blank=True, null=True, default=None)
+
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='prompts')
     tags = models.CharField(max_length=300, blank=True)
     is_premium = models.BooleanField(default=False)
     usage_count = models.BigIntegerField(default=0)
-    like_count = models.BigIntegerField(default=0)  # NAYA
+    like_count = models.BigIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -41,11 +48,10 @@ class Favourite(models.Model):
         unique_together = ('device_id', 'prompt')
 
 
-# NAYA LIKE MODEL
 class PromptLike(models.Model):
     device_id = models.CharField(max_length=255)
     prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name='likes')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('device_id', 'prompt')  # Ek device = Ek like
+        unique_together = ('device_id', 'prompt')

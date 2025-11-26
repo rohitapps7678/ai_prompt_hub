@@ -1,17 +1,17 @@
-# ai_prompt_hub/settings.py
+import os
+os.environ['CLOUDINARY_URL'] = 'cloudinary://863392175587377:VdAkiy1vlskR1P5a1wRENTrETqI@dno44x2cr'
 
+# Ab sab imports
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-super-secret-key-change-in-production')
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-please-change-me')
 DEBUG = config('DEBUG', default=True, cast=bool)
-
 ALLOWED_HOSTS = ['*']
 
-# ================== APPS ==================
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -19,24 +19,21 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'cloudinary',
-    'cloudinary_storage',
 
-    # Third Party
+    'cloudinary_storage',   # pehle
+    'cloudinary',
+
     'rest_framework',
     'rest_framework_simplejwt',
     'django_filters',
-    'corsheaders',                    # Agar web se connect karna ho
-
-    # Local
+    'corsheaders',
     'prompts_app',
 ]
 
-# ================== MIDDLEWARE ==================
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',           # CORS allow
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -65,7 +62,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ai_prompt_hub.wsgi.application'
 
-# ================== DATABASE ==================
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -73,7 +69,6 @@ DATABASES = {
     }
 }
 
-# ================== AUTH & JWT ==================
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -81,14 +76,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# ================== REST FRAMEWORK + JWT ==================
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 50
@@ -100,25 +90,24 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
 }
 
-# ================== CORS (Web ke liye) ==================
-CORS_ALLOW_ALL_ORIGINS = True  # Production mein restrict karna
-
-# ================== INTERNATIONALIZATION ==================
+CORS_ALLOW_ALL_ORIGINS = True
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
 USE_TZ = True
 
-# ================== STATIC & MEDIA ==================
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [BASE_DIR / 'static']
-BASE_URL = "http://10.109.143.98:8000/"
+MEDIA_URL = '/media/'
+
+# YE SABSE ZAROORI HAI
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+# Optional fallback (dono rakh do, koi nuksaan nahi)
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': 'root',
+    'CLOUD_NAME': 'dno44x2cr',
     'API_KEY': '863392175587377',
-    'API_SECRET': 'VdAkiy1vlskR1P5a1wRENTrETqI',
+    'API_SECRET': 'VdAkiy1vlskR1P5a1wRENTrETqI'
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
