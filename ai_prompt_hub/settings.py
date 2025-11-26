@@ -115,8 +115,10 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 BASE_URL = "http://10.109.143.98:8000/"
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': 'root',
+    'API_KEY': '863392175587377',
+    'API_SECRET': 'VdAkiy1vlskR1P5a1wRENTrETqI',
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
