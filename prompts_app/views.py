@@ -147,7 +147,7 @@ class PromptUpdateView(generics.UpdateAPIView):
     queryset = Prompt.objects.all()
     serializer_class = PromptSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     lookup_field = 'pk'
 
 
