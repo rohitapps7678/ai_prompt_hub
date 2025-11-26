@@ -7,3 +7,5 @@ python-decouple
 whitenoise
 pillow
 gunicorn
+cloudinary
+django-cloudinary-storage
