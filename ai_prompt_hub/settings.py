@@ -67,13 +67,21 @@ WSGI_APPLICATION = 'ai_prompt_hub.wsgi.application'
 # 🔥 POSTGRES DATABASE (FINAL)
 # ============================
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=config("DATABASE_URL"),
-        conn_max_age=600,
-        ssl_require=True
-    )
-}
+if config("DATABASE_URL", default=None):
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=config("DATABASE_URL"),
+            conn_max_age=600
+        )
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / "db.sqlite3",
+        }
+    }
+
 
 
 AUTH_PASSWORD_VALIDATORS = [

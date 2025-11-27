@@ -1,7 +1,7 @@
 # prompts_app/serializers.py
 
 from rest_framework import serializers
-from .models import Category, Prompt, PromptLike
+from .models import Category, Prompt, PromptLike, Ad
 
 
 class CategorySerializer(serializers.ModelSerializer):
