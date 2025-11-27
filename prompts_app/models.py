@@ -2,6 +2,8 @@
 
 from django.db import models
 import uuid
+from django.utils import timezone
+from datetime import timedelta
 
 
 class Category(models.Model):

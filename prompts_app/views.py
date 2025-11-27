@@ -172,22 +172,37 @@ class CategoryDeleteView(generics.DestroyAPIView):
 
 # ===================== ADS SYSTEM - ACTIVE ADS (PUBLIC) =====================
 
+c# views.py → ActiveAdsView ko ye safe version se replace kar do
+
 class ActiveAdsView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        # Sirf active + non-expired ads
-        ads = Ad.objects.filter(is_active=True)
-        active_ads = [ad for ad in ads if not ad.is_expired()]
+        try:
+            ads = Ad.objects.filter(is_active=True)
+            active_ads = []
 
-        banner = next((a for a in active_ads if a.ad_type == 'banner'), None)
-        video = next((a for a in active_ads if a.ad_type == 'video'), None)
+            for ad in ads:
+                try:
+                    if not ad.is_expired():
+                        active_ads.append(ad)
+                except:
+                    continue  # Agar kisi ad mein koi issue hai, skip
 
-        data = {
-            'banner_ad': AdSerializer(banner).data if banner else None,
-            'video_ad': AdSerializer(video).data if video else None,
-        }
-        return Response(data)
+            banner = next((a for a in active_ads if a.ad_type == 'banner'), None)
+            video = next((a for a in active_ads if a.ad_type == 'video'), None)
+
+            return Response({
+                'banner_ad': AdSerializer(banner).data if banner else None,
+                'video_ad': AdSerializer(video).data if video else None,
+            })
+
+        except Exception as e:
+            print("ActiveAdsView Error:", e)
+            return Response({
+                'banner_ad': None,
+                'video_ad': None
+            })
 
 
 # ===================== ADMIN: ACTIVATE BANNER / VIDEO AD (INSTANT LIVE) =====================
