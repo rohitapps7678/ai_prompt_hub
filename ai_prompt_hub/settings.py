@@ -1,10 +1,10 @@
 import os
 os.environ['CLOUDINARY_URL'] = 'cloudinary://863392175587377:VdAkiy1vlskR1P5a1wRENTrETqI@dno44x2cr'
 
-# Ab sab imports
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
+import dj_database_url   # <-- ADD THIS
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,7 +20,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    'cloudinary_storage',   # pehle
+    'cloudinary_storage',
     'cloudinary',
 
     'rest_framework',
@@ -62,12 +62,19 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ai_prompt_hub.wsgi.application'
 
+
+# ============================
+# 🔥 POSTGRES DATABASE (FINAL)
+# ============================
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default=config("DATABASE_URL"),
+        conn_max_age=600,
+        ssl_require=True
+    )
 }
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -100,10 +107,8 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 
-# YE SABSE ZAROORI HAI
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
-# Optional fallback (dono rakh do, koi nuksaan nahi)
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': 'dno44x2cr',
     'API_KEY': '863392175587377',
