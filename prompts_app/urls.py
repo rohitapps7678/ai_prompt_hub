@@ -19,6 +19,10 @@ urlpatterns = [
     path('admin/prompts/<uuid:pk>/update/', views.PromptUpdateView.as_view(), name='prompt-update'),
     path('admin/prompts/<uuid:pk>/delete/', views.PromptDeleteView.as_view(), name='prompt-delete'),
     path('ads/active/', views.ActiveAdsView.as_view(), name='active-ads'),
+    # prompts_app/urls.py (end mein add kar do)
+
+    path('admin/ads/activate-banner/', views.activate_banner_ad),
+    path('admin/ads/activate-video/', views.activate_video_ad),
 
     # Admin Only - Categories
     path('admin/categories/create/', views.CategoryCreateView.as_view(), name='category-create'),

@@ -5,11 +5,14 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from django.db import models
+from rest_framework.decorators import api_view, permission_classes
+from django.db import models, transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from datetime import timedelta
 
 from .models import Category, Prompt, Favourite, PromptLike, Ad
-from .serializers import CategorySerializer, PromptSerializer, AdSerializer
+from .serializers import CategorySerializer, PromptSerializer, AdSerializer, AdCreateSerializer  # <-- Add AdCreateSerializer
 
 
 # ===================== PUBLIC APIs (Bina Login Ke) =====================
@@ -19,7 +22,6 @@ class CategoryList(generics.ListAPIView):
     serializer_class = CategorySerializer
     permission_classes = [AllowAny]
 
-    # Fix: Direct list return (no pagination issue)
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True)
@@ -32,30 +34,23 @@ class PromptList(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = Prompt.objects.select_related('category').all().order_by('-created_at')
-        device_id = self.request.query_params.get('device_id')
-
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
                 models.Q(title__icontains=search) |
                 models.Q(prompt_text__icontains=search)
             )
-
         category = self.request.query_params.get('category')
         if category:
             queryset = queryset.filter(category__slug=category)
-
         return queryset
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
-        serializer = serializer = self.get_serializer(
-    queryset, many=True,
-    context={
-        'device_id': request.query_params.get('device_id'),
-        'request': request
-    }
-)
+        serializer = self.get_serializer(
+            queryset, many=True,
+            context={'device_id': request.query_params.get('device_id'), 'request': request}
+        )
         return Response(serializer.data)
 
 
@@ -69,13 +64,10 @@ class PromptDetail(generics.RetrieveAPIView):
         prompt = self.get_object()
         prompt.usage_count += 1
         prompt.save()
-        serializer = serializer = self.get_serializer(
-    prompt,
-    context={
-        'device_id': request.query_params.get('device_id'),
-        'request': request
-    }
-)
+        serializer = self.get_serializer(
+            prompt,
+            context={'device_id': request.query_params.get('device_id'), 'request': request}
+        )
         return Response(serializer.data)
 
 
@@ -169,7 +161,7 @@ class CategoryUpdateView(generics.UpdateAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
-    lookup_field = 'id'  # UUID field
+    lookup_field = 'id'
 
 
 class CategoryDeleteView(generics.DestroyAPIView):
@@ -177,17 +169,17 @@ class CategoryDeleteView(generics.DestroyAPIView):
     permission_classes = [IsAuthenticated]
     lookup_field = 'id'
 
+
+# ===================== ADS SYSTEM - ACTIVE ADS (PUBLIC) =====================
+
 class ActiveAdsView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        ads = Ad.objects.filter(is_active=True).exclude(duration_days__lte=0)
-        active_ads = []
-        for ad in ads:
-            if not ad.is_expired():
-                active_ads.append(ad)
-        
-        # Client ko sirf ek active banner aur ek video ad bhejo
+        # Sirf active + non-expired ads
+        ads = Ad.objects.filter(is_active=True)
+        active_ads = [ad for ad in ads if not ad.is_expired()]
+
         banner = next((a for a in active_ads if a.ad_type == 'banner'), None)
         video = next((a for a in active_ads if a.ad_type == 'video'), None)
 
@@ -196,3 +188,40 @@ class ActiveAdsView(APIView):
             'video_ad': AdSerializer(video).data if video else None,
         }
         return Response(data)
+
+
+# ===================== ADMIN: ACTIVATE BANNER / VIDEO AD (INSTANT LIVE) =====================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def activate_banner_ad(request):
+    return _activate_ad(request, 'banner')
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def activate_video_ad(request):
+    return _activate_ad(request, 'video')
+
+
+def _activate_ad(request, ad_type):
+    serializer = AdCreateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    with transaction.atomic():
+        # Purane active ad ko deactivate kar do
+        Ad.objects.filter(ad_type=ad_type, is_active=True).update(is_active=False)
+        
+        # Naya ad create + active kar do
+        ad = serializer.save(
+            ad_type=ad_type,
+            is_active=True,
+            created_at=timezone.now()  # Force fresh timestamp
+        )
+
+    return Response({
+        "success": True,
+        "message": f"{ad_type.title()} Ad is now LIVE across the app!",
+        "ad": AdSerializer(ad).data
+    }, status=201)

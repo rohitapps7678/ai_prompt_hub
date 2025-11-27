@@ -53,3 +53,18 @@ class AdSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ad
         fields = ['id', 'title', 'ad_type', 'image_url', 'video_url', 'redirect_url', 'show_after_seconds']
+
+# prompts_app/serializers.py
+
+class AdCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Ad
+        fields = ['title', 'ad_type', 'image_url', 'video_url', 'redirect_url', 'show_after_seconds', 'duration_days']
+
+    def validate(self, data):
+        ad_type = data.get('ad_type')
+        if ad_type == 'banner' and not data.get('image_url'):
+            raise serializers.ValidationError("image_url is required for banner ads")
+        if ad_type == 'video' and not data.get('video_url'):
+            raise serializers.ValidationError("video_url is required for video ads")
+        return data
