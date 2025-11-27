@@ -18,6 +18,7 @@ urlpatterns = [
     path('admin/prompts/create/', views.PromptCreateView.as_view(), name='prompt-create'),
     path('admin/prompts/<uuid:pk>/update/', views.PromptUpdateView.as_view(), name='prompt-update'),
     path('admin/prompts/<uuid:pk>/delete/', views.PromptDeleteView.as_view(), name='prompt-delete'),
+    path('ads/active/', views.ActiveAdsView.as_view(), name='active-ads'),
 
     # Admin Only - Categories
     path('admin/categories/create/', views.CategoryCreateView.as_view(), name='category-create'),

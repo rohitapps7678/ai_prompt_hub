@@ -8,8 +8,8 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db import models
 from django.shortcuts import get_object_or_404
 
-from .models import Category, Prompt, Favourite, PromptLike
-from .serializers import CategorySerializer, PromptSerializer
+from .models import Category, Prompt, Favourite, PromptLike, Ad
+from .serializers import CategorySerializer, PromptSerializer, AdSerializer
 
 
 # ===================== PUBLIC APIs (Bina Login Ke) =====================
@@ -176,3 +176,23 @@ class CategoryDeleteView(generics.DestroyAPIView):
     queryset = Category.objects.all()
     permission_classes = [IsAuthenticated]
     lookup_field = 'id'
+
+class ActiveAdsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        ads = Ad.objects.filter(is_active=True).exclude(duration_days__lte=0)
+        active_ads = []
+        for ad in ads:
+            if not ad.is_expired():
+                active_ads.append(ad)
+        
+        # Client ko sirf ek active banner aur ek video ad bhejo
+        banner = next((a for a in active_ads if a.ad_type == 'banner'), None)
+        video = next((a for a in active_ads if a.ad_type == 'video'), None)
+
+        data = {
+            'banner_ad': AdSerializer(banner).data if banner else None,
+            'video_ad': AdSerializer(video).data if video else None,
+        }
+        return Response(data)

@@ -55,3 +55,34 @@ class PromptLike(models.Model):
 
     class Meta:
         unique_together = ('device_id', 'prompt')
+
+# prompts_app/models.py (add this model)
+
+class Ad(models.Model):
+    AD_TYPE_CHOICES = [
+        ('banner', 'Banner Ad'),
+        ('video', 'Video Ad'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=100, help_text="Internal name")
+    ad_type = models.CharField(max_length=10, choices=AD_TYPE_CHOICES)
+    
+    # For Banner
+    image_url = models.URLField(blank=True, null=True)
+    
+    # For Video (YouTube embed link ya direct MP4)
+    video_url = models.URLField(blank=True, null=True, help_text="YouTube: https://youtube.com/watch?v=xxx ya direct MP4 link")
+    
+    redirect_url = models.URLField(max_length=500, help_text="Jahan click karne pe jayega")
+    
+    is_active = models.BooleanField(default=True)
+    show_after_seconds = models.PositiveIntegerField(default=0, help_text="Kitne seconds baad dubara dikhega (0 = har baar)")
+    duration_days = models.PositiveIntegerField(default=7, help_text="Kitne din tak ye ad dikhega")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_expired(self):
+        return timezone.now() > self.created_at + timedelta(days=self.duration_days)
+    
+    def __str__(self):
+        return f"{self.title} ({self.ad_type})"

@@ -48,3 +48,8 @@ class PromptSerializer(serializers.ModelSerializer):
         if device_id:
             return obj.likes.filter(device_id=device_id).exists()
         return False
+
+class AdSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Ad
+        fields = ['id', 'title', 'ad_type', 'image_url', 'video_url', 'redirect_url', 'show_after_seconds']
