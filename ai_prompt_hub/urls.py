@@ -4,7 +4,6 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 
-# JWT Views
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -16,17 +15,21 @@ from django.http import JsonResponse
 
 def run_migrations(request):
     try:
+        # 🔥 Step 1: Make migrations
+        call_command('makemigrations')
+
+        # 🔥 Step 2: Apply migrations
         call_command('migrate')
-        return JsonResponse({"status": "migrations applied successfully"})
+
+        return JsonResponse({"status": "makemigrations + migrate applied successfully"})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
-# 🔥 TEMP ADMIN CREATION
+# TEMP ADMIN CREATION
 from django.contrib.auth.models import User
-
 def create_admin(request):
     try:
-        if User.objects.filter(username="admin").exists():
+        if User.objects.filter(username="rohit").exists():
             return JsonResponse({"status": "admin already exists"})
         
         User.objects.create_superuser(
@@ -41,19 +44,15 @@ def create_admin(request):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
-    # API
+
     path('api/', include('prompts_app.urls')),
 
-    # JWT Login Endpoints
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    # Temporary migration URL
+    # 👉 Updated Migration URL
     path('run-migrations/', run_migrations),
 
-    # Temporary admin creation URL
+    # Create admin
     path('create-admin/', create_admin),
 ]
-
-# Serve media files in development
