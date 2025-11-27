@@ -172,7 +172,9 @@ class CategoryDeleteView(generics.DestroyAPIView):
 
 # ===================== ADS SYSTEM - ACTIVE ADS (PUBLIC) =====================
 
-c# views.py → ActiveAdsView ko ye safe version se replace kar do
+# views.py → ActiveAdsView ko ye safe version se replace kar do
+
+# ===================== ADS SYSTEM - ACTIVE ADS (PUBLIC) =====================
 
 class ActiveAdsView(APIView):
     permission_classes = [AllowAny]
@@ -187,7 +189,7 @@ class ActiveAdsView(APIView):
                     if not ad.is_expired():
                         active_ads.append(ad)
                 except:
-                    continue  # Agar kisi ad mein koi issue hai, skip
+                    continue
 
             banner = next((a for a in active_ads if a.ad_type == 'banner'), None)
             video = next((a for a in active_ads if a.ad_type == 'video'), None)
@@ -198,7 +200,7 @@ class ActiveAdsView(APIView):
             })
 
         except Exception as e:
-            print("ActiveAdsView Error:", e)
+            print("Ad Error:", e)
             return Response({
                 'banner_ad': None,
                 'video_ad': None
@@ -225,18 +227,15 @@ def _activate_ad(request, ad_type):
         return Response(serializer.errors, status=400)
 
     with transaction.atomic():
-        # Purane active ad ko deactivate kar do
         Ad.objects.filter(ad_type=ad_type, is_active=True).update(is_active=False)
-        
-        # Naya ad create + active kar do
         ad = serializer.save(
             ad_type=ad_type,
             is_active=True,
-            created_at=timezone.now()  # Force fresh timestamp
+            created_at=timezone.now()
         )
 
     return Response({
         "success": True,
-        "message": f"{ad_type.title()} Ad is now LIVE across the app!",
+        "message": f"{ad_type.title()} Ad is now LIVE!",
         "ad": AdSerializer(ad).data
     }, status=201)
