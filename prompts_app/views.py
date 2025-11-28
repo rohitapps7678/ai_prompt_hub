@@ -71,7 +71,7 @@ class PromptDetail(generics.RetrieveAPIView):
             prompt,
             context={'device_id': request.query_params.get('device_id'), 'request': request}
         )
-        return Return Response(serializer.data)
+        return Response(serializer.data)
 
 
 # ===================== LIKE & FAVOURITE (Device Based) =====================
