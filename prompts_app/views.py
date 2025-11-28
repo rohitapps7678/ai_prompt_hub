@@ -9,10 +9,13 @@ from rest_framework.decorators import api_view, permission_classes
 from django.db import models, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from datetime import timedelta
 
 from .models import Category, Prompt, Favourite, PromptLike, Ad
-from .serializers import CategorySerializer, PromptSerializer, AdSerializer, AdCreateSerializer  # <-- Add AdCreateSerializer
+from .serializers import CategorySerializer, PromptSerializer, AdSerializer, AdCreateSerializer
+
+User = get_user_model()
 
 
 # ===================== PUBLIC APIs (Bina Login Ke) =====================
@@ -68,7 +71,7 @@ class PromptDetail(generics.RetrieveAPIView):
             prompt,
             context={'device_id': request.query_params.get('device_id'), 'request': request}
         )
-        return Response(serializer.data)
+        return Return Response(serializer.data)
 
 
 # ===================== LIKE & FAVOURITE (Device Based) =====================
@@ -172,10 +175,6 @@ class CategoryDeleteView(generics.DestroyAPIView):
 
 # ===================== ADS SYSTEM - ACTIVE ADS (PUBLIC) =====================
 
-# views.py → ActiveAdsView ko ye safe version se replace kar do
-
-# ===================== ADS SYSTEM - ACTIVE ADS (PUBLIC) =====================
-
 class ActiveAdsView(APIView):
     permission_classes = [AllowAny]
 
@@ -185,11 +184,8 @@ class ActiveAdsView(APIView):
             active_ads = []
 
             for ad in ads:
-                try:
-                    if not ad.is_expired():
-                        active_ads.append(ad)
-                except:
-                    continue
+                if not ad.is_expired():
+                    active_ads.append(ad)
 
             banner = next((a for a in active_ads if a.ad_type == 'banner'), None)
             video = next((a for a in active_ads if a.ad_type == 'video'), None)
@@ -201,13 +197,10 @@ class ActiveAdsView(APIView):
 
         except Exception as e:
             print("Ad Error:", e)
-            return Response({
-                'banner_ad': None,
-                'video_ad': None
-            })
+            return Response({'banner_ad': None, 'video_ad': None})
 
 
-# ===================== ADMIN: ACTIVATE BANNER / VIDEO AD (INSTANT LIVE) =====================
+# ===================== ADMIN: ACTIVATE BANNER / VIDEO AD =====================
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -240,33 +233,50 @@ def _activate_ad(request, ad_type):
         "ad": AdSerializer(ad).data
     }, status=201)
 
+
 # ===================== ADMIN: DEACTIVATE AD =====================
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deactivate_ad(request):
-    ad_type = request.data.get('ad_type')  # 'banner' or 'video'
+    ad_type = request.data.get('ad_type')
 
     if ad_type not in ['banner', 'video']:
         return Response({"error": "ad_type must be 'banner' or 'video'"}, status=400)
 
+    with transaction.atomic():
+        deactivated_count = Ad.objects.filter(ad_type=ad_type, is_active=True).update(is_active=False)
+
+    if deactivated_count > 0:
+        return Response({"success": True, "message": f"{ad_type.title()} ad deactivated successfully."})
+    else:
+        return Response({"success": True, "message": f"No active {ad_type} ad found."})
+
+
+# ===================== ADMIN: CHANGE ADMIN USERNAME & PASSWORD =====================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_admin_credentials(request):
+    if not request.user.is_superuser:
+        return Response({"error": "Only superuser can change admin credentials"}, status=403)
+
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    if not username or len(username) < 4:
+        return Response({"error": "Username must be at least 4 characters"}, status=400)
+    if not password or len(password) < 6:
+        return Response({"error": "Password must be at least 6 characters"}, status=400)
+
     try:
-        with transaction.atomic():
-            deactivated_count = Ad.objects.filter(
-                ad_type=ad_type,
-                is_active=True
-            ).update(is_active=False)
-
-        if deactivated_count > 0:
-            return Response({
-                "success": True,
-                "message": f"{ad_type.title()} ad has been deactivated."
-            })
-        else:
-            return Response({
-                "success": True,
-                "message": f"No active {ad_type} ad found."
-            })
-
+        user = request.user
+        user.username = username
+        user.set_password(password)
+        user.save()
+        return Response({
+            "success": True,
+            "message": "Admin credentials updated successfully! Please login again."
+        })
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        return Response({"error": "Failed to update credentials"}, status=500)
