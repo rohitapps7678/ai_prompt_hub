@@ -23,6 +23,9 @@ urlpatterns = [
 
     path('admin/ads/activate-banner/', views.activate_banner_ad),
     path('admin/ads/activate-video/', views.activate_video_ad),
+    # prompts_app/urls.py (add this line)
+
+path('admin/ads/deactivate/', views.deactivate_ad, name='deactivate-ad'),
 
     # Admin Only - Categories
     path('admin/categories/create/', views.CategoryCreateView.as_view(), name='category-create'),

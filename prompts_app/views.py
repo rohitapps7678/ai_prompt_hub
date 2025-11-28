@@ -239,3 +239,34 @@ def _activate_ad(request, ad_type):
         "message": f"{ad_type.title()} Ad is now LIVE!",
         "ad": AdSerializer(ad).data
     }, status=201)
+
+# ===================== ADMIN: DEACTIVATE AD =====================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def deactivate_ad(request):
+    ad_type = request.data.get('ad_type')  # 'banner' or 'video'
+
+    if ad_type not in ['banner', 'video']:
+        return Response({"error": "ad_type must be 'banner' or 'video'"}, status=400)
+
+    try:
+        with transaction.atomic():
+            deactivated_count = Ad.objects.filter(
+                ad_type=ad_type,
+                is_active=True
+            ).update(is_active=False)
+
+        if deactivated_count > 0:
+            return Response({
+                "success": True,
+                "message": f"{ad_type.title()} ad has been deactivated."
+            })
+        else:
+            return Response({
+                "success": True,
+                "message": f"No active {ad_type} ad found."
+            })
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
