@@ -9,7 +9,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Category
-        fields = ['id', 'name', 'slug', 'icon', 'order', 'prompts_count']
+        fields = ['id', 'name', 'slug', 'order', 'prompts_count']
 
     def get_prompts_count(self, obj):
         return obj.prompts.count()

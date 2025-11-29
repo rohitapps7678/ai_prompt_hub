@@ -26,9 +26,27 @@ class CategoryList(generics.ListAPIView):
     permission_classes = [AllowAny]
 
     def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        # Pehle saari real categories lo
+        real_categories = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(real_categories, many=True)
+        real_data = serializer.data
+
+        # Ek baar total prompts count nikaalo
+        total_prompts = Prompt.objects.count()
+
+        # Sirf ek virtual "All" category banao
+        all_category = {
+            "id": "all",
+            "name": "All",
+            "slug": "all",
+            "order": -999,
+            "prompts_count": total_prompts
+        }
+
+        # "All" ko sabse upar daal do, aur real categories neeche
+        final_data = [all_category] + real_data
+
+        return Response(final_data)
 
 
 class PromptList(generics.ListAPIView):
@@ -37,15 +55,24 @@ class PromptList(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = Prompt.objects.select_related('category').all().order_by('-created_at')
+
+        # Search functionality
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
                 models.Q(title__icontains=search) |
                 models.Q(prompt_text__icontains=search)
             )
+
+        # Category filter
         category = self.request.query_params.get('category')
-        if category:
+
+        # Agar "all" ho, ya blank ho, ya None ho → koi filter nahi lagao
+        if category in ['all', '', None]:
+            pass  # Saare prompts dikhao
+        elif category:
             queryset = queryset.filter(category__slug=category)
+
         return queryset
 
     def list(self, request, *args, **kwargs):
@@ -181,11 +208,7 @@ class ActiveAdsView(APIView):
     def get(self, request):
         try:
             ads = Ad.objects.filter(is_active=True)
-            active_ads = []
-
-            for ad in ads:
-                if not ad.is_expired():
-                    active_ads.append(ad)
+            active_ads = [ad for ad in ads if not ad.is_expired()]
 
             banner = next((a for a in active_ads if a.ad_type == 'banner'), None)
             video = next((a for a in active_ads if a.ad_type == 'video'), None)
