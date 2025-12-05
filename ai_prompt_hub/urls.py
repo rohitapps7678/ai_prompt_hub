@@ -2,36 +2,51 @@
 
 from django.contrib import admin
 from django.urls import path, include
-from django.conf import settings
+from django.http import JsonResponse
 
+# JWT Auth Views
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
 
-# FOR TEMP MIGRATION
+# TEMP MIGRATION SUPPORT (OPTIONAL)
 from django.core.management import call_command
-from django.http import JsonResponse
+from django.contrib.auth.models import User
 
+
+# ======================
+# HEALTH ENDPOINT (PING)
+# ======================
+def health(request):
+    return JsonResponse({"status": "ok"})
+
+
+# =====================
+# RUN MIGRATIONS (TEMP)
+# =====================
 def run_migrations(request):
     try:
-        # 🔥 Step 1: Make migrations
+        # Create migrations
         call_command('makemigrations')
-
-        # 🔥 Step 2: Apply migrations
+        # Apply migrations
         call_command('migrate')
 
-        return JsonResponse({"status": "makemigrations + migrate applied successfully"})
+        return JsonResponse({
+            "status": "makemigrations + migrate applied successfully"
+        })
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
-# TEMP ADMIN CREATION
-from django.contrib.auth.models import User
+
+# ================================
+# CREATE ADMIN USER (TEMP UTILITY)
+# ================================
 def create_admin(request):
     try:
         if User.objects.filter(username="rohit").exists():
             return JsonResponse({"status": "admin already exists"})
-        
+
         User.objects.create_superuser(
             username="rohit",
             password="rohit7678@",
@@ -42,17 +57,23 @@ def create_admin(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
+# =============
+# URL PATTERNS
+# =============
 urlpatterns = [
     path('admin/', admin.site.urls),
 
+    # Public & Admin APIs
     path('api/', include('prompts_app.urls')),
 
+    # JWT Authentication
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    # 👉 Updated Migration URL
-    path('run-migrations/', run_migrations),
+    # Health check (Ping for Render)
+    path('health/', health),
 
-    # Create admin
+    # TEMP Tools (Remove in production)
+    path('run-migrations/', run_migrations),
     path('create-admin/', create_admin),
 ]
