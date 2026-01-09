@@ -296,31 +296,38 @@ def change_admin_credentials(request):
         return Response({"error": "Failed to update credentials"}, status=500)
 
 
-# ===================== NEW: ADMOB CONFIGURATION (PUBLIC READ) =====================
-
 class AdmobConfigView(APIView):
     """
-    Flutter app is endpoint se AdMob ke saare ad unit IDs le sakta hai
-    Admin panel se AdmobConfig model edit karke IDs change kar sakte ho
+    Flutter ऐप इस endpoint से AdMob के सारे ad unit IDs ले सकता है।
+    Admin पैनल में AdmobConfig मॉडल एडिट करके IDs बदल सकते हो।
     """
     permission_classes = [AllowAny]
 
     def get(self, request):
+        # सबसे पहले एक्टिव कॉन्फ़िगरेशन ढूंढो
         config = AdmobConfig.objects.filter(is_active=True).first()
 
-        if not config:
-            # Fallback - test IDs ya empty
-            return Response({
-                "banner_android": "ca-app-pub-3940256099942544/6300978111",
-                "banner_ios": "ca-app-pub-3940256099942544/2934735716",
-                "interstitial_android": "",
-                "interstitial_ios": "",
-                "rewarded_android": "",
-                "rewarded_ios": "",
-                "app_open_android": "",
-                "app_open_ios": "",
-                "rewarded_interstitial_android": "",
-                "rewarded_interstitial_ios": "",
-            })
+        if config:
+            # अगर एक्टिव कॉन्फ़िगरेशन मिल गया तो उसे serialize करके भेज दो
+            serializer = AdmobConfigSerializer(config)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
-        return Response(AdmobConfigSerializer(config).data)
+        # अगर कोई एक्टिव कॉन्फ़िगरेशन नहीं मिला तो Google के ऑफिशियल टेस्ट IDs भेजो
+        # (ये IDs प्रोडक्शन में भी काम करते हैं, लेकिन असली revenue नहीं देते)
+        test_config = {
+            "banner_android": "ca-app-pub-3940256099942544/6300978111",
+            "banner_ios": "ca-app-pub-3940256099942544/2934735716",
+            "interstitial_android": "ca-app-pub-3940256099942544/1033173712",
+            "interstitial_ios": "ca-app-pub-3940256099942544/4411468910",
+            "rewarded_android": "ca-app-pub-3940256099942544/5224354917",
+            "rewarded_ios": "ca-app-pub-3940256099942544/1712485313",
+            "app_open_android": "ca-app-pub-3940256099942544/3419835294",
+            "app_open_ios": "ca-app-pub-3940256099942544/5662855255",
+            "rewarded_interstitial_android": "ca-app-pub-3940256099942544/5351527112",
+            "rewarded_interstitial_ios": "ca-app-pub-3940256099942544/6978759865",
+            "native_android": "",
+            "native_ios": "",
+            # अगर आप और IDs इस्तेमाल करना चाहते हो तो यहाँ जोड़ सकते हो
+        }
+
+        return Response(test_config, status=status.HTTP_200_OK)
