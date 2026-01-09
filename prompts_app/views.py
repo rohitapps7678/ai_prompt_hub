@@ -369,6 +369,7 @@ class AdmobConfigPublicView(APIView):
 class AdmobConfigAdminView(APIView):
     """
     Admin panel (settings.html) के लिए: GET से current config देखना + POST से update/create
+    Admin 500 error fix + checkbox ON/OFF dono perfect काम करेगा
     """
     permission_classes = [IsAuthenticated]
 
@@ -376,6 +377,8 @@ class AdmobConfigAdminView(APIView):
         config = AdmobConfig.objects.filter(is_active=True).first()
         if config:
             return Response(AdmobConfigSerializer(config).data)
+        
+        # No active config = empty fields + is_active=False
         return Response({
             "banner_android": "",
             "banner_ios": "",
@@ -386,25 +389,51 @@ class AdmobConfigAdminView(APIView):
             "app_open_android": "",
             "app_open_ios": "",
             "is_active": False
-        }, status=status.HTTP_200_OK)
+        }, status=200)
 
     @transaction.atomic
     def post(self, request):
-        if request.data.get('is_active'):
-            AdmobConfig.objects.filter(is_active=True).update(is_active=False)
+        try:
+            data = request.data
+            is_active_requested = data.get('is_active', False) == True  # Exact True check
 
-        existing = AdmobConfig.objects.filter(is_active=True).first()
+            # 1. Agar user ne checkbox ON kiya = sirf ek hi active rehna chahiye
+            if is_active_requested:
+                AdmobConfig.objects.filter(is_active=True).update(is_active=False)
 
-        if existing:
-            serializer = AdmobConfigSerializer(existing, data=request.data, partial=True)
-        else:
-            serializer = AdmobConfigSerializer(data=request.data)
+            # 2. Existing active config dhundho (ab 0 hoga if step 1 ran)
+            existing = AdmobConfig.objects.first()  # Koi bhi ek lo, active ho ya na ho
 
-        if serializer.is_valid():
-            instance = serializer.save()
-            if request.data.get('is_active') is not False:
-                instance.is_active = True
+            if existing:
+                # Update existing record
+                serializer = AdmobConfigSerializer(existing, data=data, partial=True)
+            else:
+                # Create new record
+                serializer = AdmobConfigSerializer(data=data)
+
+            if serializer.is_valid():
+                instance = serializer.save()
+                
+                # 3. Exact user request ke hisab se active/inactive karo
+                instance.is_active = is_active_requested
                 instance.save(update_fields=['is_active'])
-            return Response(AdmobConfigSerializer(instance).data, status=status.HTTP_200_OK)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Success response with latest data
+                return Response({
+                    "success": True,
+                    "message": "AdMob settings saved successfully!",
+                    "data": AdmobConfigSerializer(instance).data
+                }, status=200)
+            
+            # Validation error
+            return Response({
+                "success": False,
+                "error": serializer.errors
+            }, status=400)
+            
+        except Exception as e:
+            # Detailed error for debugging (production mein remove kar dena)
+            return Response({
+                "success": False,
+                "error": f"Server error: {str(e)}"
+            }, status=500)
