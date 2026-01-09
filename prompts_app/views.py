@@ -12,8 +12,14 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from datetime import timedelta
 
-from .models import Category, Prompt, Favourite, PromptLike, Ad
-from .serializers import CategorySerializer, PromptSerializer, AdSerializer, AdCreateSerializer
+from .models import Category, Prompt, Favourite, PromptLike, Ad, AdmobConfig
+from .serializers import (
+    CategorySerializer,
+    PromptSerializer,
+    AdSerializer,
+    AdCreateSerializer,
+    AdmobConfigSerializer
+)
 
 User = get_user_model()
 
@@ -26,15 +32,12 @@ class CategoryList(generics.ListAPIView):
     permission_classes = [AllowAny]
 
     def list(self, request, *args, **kwargs):
-        # Pehle saari real categories lo
         real_categories = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(real_categories, many=True)
         real_data = serializer.data
 
-        # Ek baar total prompts count nikaalo
         total_prompts = Prompt.objects.count()
 
-        # Sirf ek virtual "All" category banao
         all_category = {
             "id": "all",
             "name": "All",
@@ -43,9 +46,7 @@ class CategoryList(generics.ListAPIView):
             "prompts_count": total_prompts
         }
 
-        # "All" ko sabse upar daal do, aur real categories neeche
         final_data = [all_category] + real_data
-
         return Response(final_data)
 
 
@@ -56,7 +57,6 @@ class PromptList(generics.ListAPIView):
     def get_queryset(self):
         queryset = Prompt.objects.select_related('category').all().order_by('-created_at')
 
-        # Search functionality
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
@@ -64,13 +64,8 @@ class PromptList(generics.ListAPIView):
                 models.Q(prompt_text__icontains=search)
             )
 
-        # Category filter
         category = self.request.query_params.get('category')
-
-        # Agar "all" ho, ya blank ho, ya None ho → koi filter nahi lagao
-        if category in ['all', '', None]:
-            pass  # Saare prompts dikhao
-        elif category:
+        if category not in ['all', '', None]:
             queryset = queryset.filter(category__slug=category)
 
         return queryset
@@ -79,7 +74,7 @@ class PromptList(generics.ListAPIView):
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(
             queryset, many=True,
-            context={'device_id': request.query_params.get('device_id'), 'request': request}
+            context={'device_id': request.query_params.get('device_id')}
         )
         return Response(serializer.data)
 
@@ -96,7 +91,7 @@ class PromptDetail(generics.RetrieveAPIView):
         prompt.save()
         serializer = self.get_serializer(
             prompt,
-            context={'device_id': request.query_params.get('device_id'), 'request': request}
+            context={'device_id': request.query_params.get('device_id')}
         )
         return Response(serializer.data)
 
@@ -179,7 +174,7 @@ class PromptDeleteView(generics.DestroyAPIView):
     lookup_field = 'pk'
 
 
-# ===================== CATEGORY ADMIN VIEWS (JWT Required) =====================
+# ===================== CATEGORY ADMIN VIEWS =====================
 
 class CategoryCreateView(generics.CreateAPIView):
     queryset = Category.objects.all()
@@ -217,13 +212,12 @@ class ActiveAdsView(APIView):
                 'banner_ad': AdSerializer(banner).data if banner else None,
                 'video_ad': AdSerializer(video).data if video else None,
             })
-
         except Exception as e:
             print("Ad Error:", e)
             return Response({'banner_ad': None, 'video_ad': None})
 
 
-# ===================== ADMIN: ACTIVATE BANNER / VIDEO AD =====================
+# ===================== ADMIN: ACTIVATE / DEACTIVATE ADS =====================
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -257,8 +251,6 @@ def _activate_ad(request, ad_type):
     }, status=201)
 
 
-# ===================== ADMIN: DEACTIVATE AD =====================
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deactivate_ad(request):
@@ -268,15 +260,14 @@ def deactivate_ad(request):
         return Response({"error": "ad_type must be 'banner' or 'video'"}, status=400)
 
     with transaction.atomic():
-        deactivated_count = Ad.objects.filter(ad_type=ad_type, is_active=True).update(is_active=False)
+        count = Ad.objects.filter(ad_type=ad_type, is_active=True).update(is_active=False)
 
-    if deactivated_count > 0:
-        return Response({"success": True, "message": f"{ad_type.title()} ad deactivated successfully."})
-    else:
-        return Response({"success": True, "message": f"No active {ad_type} ad found."})
+    if count > 0:
+        return Response({"success": True, "message": f"{ad_type.title()} ad deactivated"})
+    return Response({"success": True, "message": f"No active {ad_type} ad found"})
 
 
-# ===================== ADMIN: CHANGE ADMIN USERNAME & PASSWORD =====================
+# ===================== ADMIN: CHANGE CREDENTIALS =====================
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -299,7 +290,37 @@ def change_admin_credentials(request):
         user.save()
         return Response({
             "success": True,
-            "message": "Admin credentials updated successfully! Please login again."
+            "message": "Admin credentials updated! Please login again."
         })
-    except Exception as e:
+    except Exception:
         return Response({"error": "Failed to update credentials"}, status=500)
+
+
+# ===================== NEW: ADMOB CONFIGURATION (PUBLIC READ) =====================
+
+class AdmobConfigView(APIView):
+    """
+    Flutter app is endpoint se AdMob ke saare ad unit IDs le sakta hai
+    Admin panel se AdmobConfig model edit karke IDs change kar sakte ho
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        config = AdmobConfig.objects.filter(is_active=True).first()
+
+        if not config:
+            # Fallback - test IDs ya empty
+            return Response({
+                "banner_android": "ca-app-pub-3940256099942544/6300978111",
+                "banner_ios": "ca-app-pub-3940256099942544/2934735716",
+                "interstitial_android": "",
+                "interstitial_ios": "",
+                "rewarded_android": "",
+                "rewarded_ios": "",
+                "app_open_android": "",
+                "app_open_ios": "",
+                "rewarded_interstitial_android": "",
+                "rewarded_interstitial_ios": "",
+            })
+
+        return Response(AdmobConfigSerializer(config).data)

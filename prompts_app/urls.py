@@ -19,6 +19,7 @@ urlpatterns = [
     path('admin/prompts/<uuid:pk>/update/', views.PromptUpdateView.as_view(), name='prompt-update'),
     path('admin/prompts/<uuid:pk>/delete/', views.PromptDeleteView.as_view(), name='prompt-delete'),
     path('ads/active/', views.ActiveAdsView.as_view(), name='active-ads'),
+    path('admob-config/', views.AdmobConfigView.as_view(), name='admob-config'),
     # prompts_app/urls.py (end mein add kar do)
 
     path('admin/ads/activate-banner/', views.activate_banner_ad),

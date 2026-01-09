@@ -1,7 +1,7 @@
 # prompts_app/serializers.py
 
 from rest_framework import serializers
-from .models import Category, Prompt, PromptLike, Ad
+from .models import Category, Prompt, PromptLike, Ad, AdmobConfig
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -23,7 +23,6 @@ class PromptSerializer(serializers.ModelSerializer):
     category_data = CategorySerializer(source='category', read_only=True)
     category_slug = serializers.CharField(source='category.slug', read_only=True)
 
-    # YE SIRF EK BAAR HONA CHAHIYE → URLField (write + read)
     image_url = serializers.URLField(
         required=False,
         allow_blank=True,
@@ -49,12 +48,12 @@ class PromptSerializer(serializers.ModelSerializer):
             return obj.likes.filter(device_id=device_id).exists()
         return False
 
+
 class AdSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ad
         fields = ['id', 'title', 'ad_type', 'image_url', 'video_url', 'redirect_url', 'show_after_seconds']
 
-# prompts_app/serializers.py
 
 class AdCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -68,3 +67,10 @@ class AdCreateSerializer(serializers.ModelSerializer):
         if ad_type == 'video' and not data.get('video_url'):
             raise serializers.ValidationError("video_url is required for video ads")
         return data
+
+
+# ── Naya Serializer AdmobConfig ke liye ────────────────────────────────
+class AdmobConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdmobConfig
+        fields = '__all__'
