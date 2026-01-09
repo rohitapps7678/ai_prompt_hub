@@ -365,23 +365,31 @@ class AdmobConfigPublicView(APIView):
         return Response(test_config, status=status.HTTP_200_OK)
 
 
-# 2. Admin के लिए POST + GET (Authenticated)
 class AdmobConfigAdminView(APIView):
     """
     Admin panel (settings.html) के लिए:
-    - GET: वर्तमान active config दिखाता है
-    - POST: config update/create करता है + is_active को सही तरीके से हैंडल करता है
+    - GET  → active config दिखाता है (fallback: last saved)
+    - POST → config create/update करता है + is_active को सही तरीके से संभालता है
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # सबसे पहले active config ढूंढें
+        """
+        1️⃣ पहले active config ढूंढे
+        2️⃣ अगर active नहीं मिला → last updated config दिखाए
+        3️⃣ अगर DB empty है → empty defaults
+        """
+
         config = AdmobConfig.objects.filter(is_active=True).first()
-        
+
+        # 🔥 FALLBACK: अगर active config नहीं मिला
+        if not config:
+            config = AdmobConfig.objects.order_by('-updated_at').first()
+
         if config:
             return Response(AdmobConfigSerializer(config).data, status=200)
-        
-        # अगर कोई active config नहीं है तो खाली/डिफ़ॉल्ट डेटा लौटाएं
+
+        # 🔹 DB पूरी तरह खाली हो तो
         return Response({
             "banner_android": "",
             "banner_ios": "",
@@ -392,7 +400,8 @@ class AdmobConfigAdminView(APIView):
             "app_open_android": "",
             "app_open_ios": "",
             "is_active": False,
-            # optional fields जो frontend में नहीं दिख रहे लेकिन serializer को चाहिए
+
+            # serializer safe fields
             "app_id_android": "",
             "app_id_ios": "",
             "rewarded_interstitial_android": "",
@@ -404,59 +413,58 @@ class AdmobConfigAdminView(APIView):
 
     @transaction.atomic
     def post(self, request):
-        data = request.data.copy()  # mutable copy
+        """
+        Save / Update config
+        - boolean is_active safe handling
+        - old active auto disable
+        """
 
-        # जरूरी optional fields जो frontend नहीं भेज रहा उन्हें डिफ़ॉल्ट वैल्यू दें
-        # ताकि serializer create के समय error न दे
+        data = request.data.copy()
+
+        # 🔹 serializer ko satisfy karne ke liye defaults
         defaults = {
-            'app_id_android': '',
-            'app_id_ios': '',
-            'rewarded_interstitial_android': '',
-            'rewarded_interstitial_ios': '',
-            'native_android': '',
-            'native_ios': '',
-            'notes': 'Updated from admin panel on ' + timezone.now().strftime("%Y-%m-%d %H:%M"),
+            "app_id_android": "",
+            "app_id_ios": "",
+            "rewarded_interstitial_android": "",
+            "rewarded_interstitial_ios": "",
+            "native_android": "",
+            "native_ios": "",
+            "notes": "Updated from admin panel on " + timezone.now().strftime("%Y-%m-%d %H:%M"),
         }
 
-        for key, default_value in defaults.items():
-            data.setdefault(key, default_value)
+        for key, value in defaults.items():
+            data.setdefault(key, value)
 
-        # क्या इस config को active करना है?
-        want_active = data.get('is_active', False) is True
+        # ✅ BOOLEAN FIX (YEH HI MAIN BUG THA)
+        want_active = bool(data.get("is_active"))
 
-        # अगर active करना है → पहले सभी पुराने active को बंद कर दो
+        # 🔥 agar active banana hai → purane sab inactive
         if want_active:
             AdmobConfig.objects.filter(is_active=True).update(is_active=False)
 
-        # मौजूदा रिकॉर्ड ढूंढें (ideal world में 0 या 1 होना चाहिए)
-        # हम पहले वाला ले लेंगे (active हो या ना हो)
+        # 🔹 ek hi record maintain karenge
         existing = AdmobConfig.objects.first()
 
         if existing:
-            # अपडेट मोड
             serializer = AdmobConfigSerializer(existing, data=data, partial=True)
         else:
-            # नया बनाने का मोड
             serializer = AdmobConfigSerializer(data=data)
 
         if serializer.is_valid():
-            saved_instance = serializer.save()
+            saved = serializer.save()
 
-            # is_active को बिल्कुल वैसा ही सेट करें जैसा यूजर ने भेजा
-            # (यहाँ तक कि false भेजने पर भी)
-            saved_instance.is_active = want_active
-            saved_instance.save(update_fields=['is_active'])
+            # 🔹 is_active explicitly set
+            saved.is_active = want_active
+            saved.save(update_fields=["is_active"])
 
-            # सफलता का जवाब
             return Response({
                 "success": True,
                 "message": "AdMob settings saved successfully!",
-                "data": AdmobConfigSerializer(saved_instance).data
+                "data": AdmobConfigSerializer(saved).data
             }, status=200)
 
-        # वैलिडेशन फेल होने पर डिटेल्ड एरर
         return Response({
             "success": False,
             "errors": serializer.errors,
-            "received_data": dict(data)  # डिबग के लिए बहुत उपयोगी
+            "received_data": dict(data)
         }, status=400)
