@@ -71,64 +71,52 @@ class AdCreateSerializer(serializers.ModelSerializer):
 
 # 🔥 FIXED ADMOB CONFIG SERIALIZER - YEH HI PROBLEM THI 🔥
 class AdmobConfigSerializer(serializers.ModelSerializer):
-    """
-    PERFECTLY FIXED: Frontend sirf 8 fields bhejta hai, baaki sabko default values
-    Create + Update dono perfect kaam karega. Save hone ke baad refresh par values rahenge!
-    """
-    # Frontend se aane wale fields (HTML form se)
-    banner_android = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    banner_ios = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    interstitial_android = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    interstitial_ios = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    rewarded_android = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    rewarded_ios = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    app_open_android = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    app_open_ios = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    
-    # is_active checkbox
-    is_active = serializers.BooleanField(default=False)
-    
-    # Baaki model fields (jo frontend nahi bhejta) - auto handle
-    id = serializers.UUIDField(read_only=True)
-    app_id_android = serializers.CharField(max_length=100, required=False, default="ca-app-pub-3940256099942544~3347511713")
-    app_id_ios = serializers.CharField(max_length=100, required=False, default="ca-app-pub-3940256099942544~3347511713")
-    rewarded_interstitial_android = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    rewarded_interstitial_ios = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    native_android = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    native_ios = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
-    notes = serializers.CharField(max_length=500, required=False, allow_blank=True, default="Updated from AI Prompt Admin Panel")
-    updated_at = serializers.DateTimeField(read_only=True)
+    # Explicitly define only the fields you actually want to accept from frontend
+    banner_android             = serializers.CharField(required=False, allow_blank=True, default="")
+    banner_ios                 = serializers.CharField(required=False, allow_blank=True, default="")
+    interstitial_android       = serializers.CharField(required=False, allow_blank=True, default="")
+    interstitial_ios           = serializers.CharField(required=False, allow_blank=True, default="")
+    rewarded_android           = serializers.CharField(required=False, allow_blank=True, default="")
+    rewarded_ios               = serializers.CharField(required=False, allow_blank=True, default="")
+    app_open_android           = serializers.CharField(required=False, allow_blank=True, default="")
+    app_open_ios               = serializers.CharField(required=False, allow_blank=True, default="")
+    is_active                  = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = AdmobConfig
         fields = [
-            'id', 'is_active', 'banner_android', 'banner_ios', 'interstitial_android', 'interstitial_ios',
-            'rewarded_android', 'rewarded_ios', 'app_open_android', 'app_open_ios',
+            'id',
+            'is_active',
+            'banner_android', 'banner_ios',
+            'interstitial_android', 'interstitial_ios',
+            'rewarded_android', 'rewarded_ios',
+            'app_open_android', 'app_open_ios',
+            'app_id_android', 'app_id_ios',           # ← still include in response
             'rewarded_interstitial_android', 'rewarded_interstitial_ios',
-            'native_android', 'native_ios', 'app_id_android', 'app_id_ios', 'notes', 'updated_at'
+            'native_android', 'native_ios',
+            'notes', 'updated_at'
         ]
-        read_only_fields = ['id', 'updated_at']
+        read_only_fields = ['id', 'updated_at', 'notes']  # optional
+
+    # Optional: give defaults for fields frontend doesn't send
+    def get_default_values(self):
+        return {
+            'app_id_android': 'ca-app-pub-3940256099942544~3347511713',  # test app id
+            'app_id_ios': 'ca-app-pub-3940256099942544~3347511713',
+            'rewarded_interstitial_android': '',
+            'rewarded_interstitial_ios': '',
+            'native_android': '',
+            'native_ios': '',
+            'notes': 'Updated from admin panel',
+        }
 
     def create(self, validated_data):
-        """Create ke time sab fields perfect save honge"""
-        return AdmobConfig.objects.create(**validated_data)
+        defaults = self.get_default_values()
+        defaults.update(validated_data)
+        return AdmobConfig.objects.create(**defaults)
 
     def update(self, instance, validated_data):
-        """Update ke time sirf jo fields aaye wohi update honge, baaki same rahenge"""
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         return instance
-
-    def to_representation(self, instance):
-        """Response mein clean data bhejo - empty strings ko "" hi rakho"""
-        data = super().to_representation(instance)
-        # Frontend ke liye clean fields
-        frontend_fields = [
-            'banner_android', 'banner_ios', 'interstitial_android', 'interstitial_ios',
-            'rewarded_android', 'rewarded_ios', 'app_open_android', 'app_open_ios'
-        ]
-        for field in frontend_fields:
-            if field in data and data[field] is None:
-                data[field] = ""
-        return data
