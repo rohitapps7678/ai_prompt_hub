@@ -332,18 +332,50 @@ class AdmobConfigView(APIView):
 
         return Response(test_config, status=status.HTTP_200_OK)
 
-class AdmobConfigManageView(APIView):
+# prompts_app/views.py
+
+# ... पहले के सारे imports और views ...
+
+# 1. Public GET endpoint (Flutter app के लिए - कोई authentication नहीं)
+class AdmobConfigPublicView(APIView):
     """
-    GET: मौजूदा active config दिखाता है
-    POST: नया config बनाता है या मौजूदा active को अपडेट करता है
+    Flutter ऐप के लिए: AdMob IDs public तरीके से लोड करने के लिए
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        config = AdmobConfig.objects.filter(is_active=True).first()
+
+        if config:
+            serializer = AdmobConfigSerializer(config)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        # Fallback test IDs
+        test_config = {
+            "banner_android": "ca-app-pub-3940256099942544/6300978111",
+            "banner_ios": "ca-app-pub-3940256099942544/2934735716",
+            "interstitial_android": "ca-app-pub-3940256099942544/1033173712",
+            "interstitial_ios": "ca-app-pub-3940256099942544/4411468910",
+            "rewarded_android": "ca-app-pub-3940256099942544/5224354917",
+            "rewarded_ios": "ca-app-pub-3940256099942544/1712485313",
+            "app_open_android": "ca-app-pub-3940256099942544/3419835294",
+            "app_open_ios": "ca-app-pub-3940256099942544/5662855255",
+            # ... बाकी IDs अगर जरूरी हों
+        }
+        return Response(test_config, status=status.HTTP_200_OK)
+
+
+# 2. Admin के लिए POST + GET (Authenticated)
+class AdmobConfigAdminView(APIView):
+    """
+    Admin panel (settings.html) के लिए: GET से current config देखना + POST से update/create
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         config = AdmobConfig.objects.filter(is_active=True).first()
         if config:
-            serializer = AdmobConfigSerializer(config)
-            return Response(serializer.data)
+            return Response(AdmobConfigSerializer(config).data)
         return Response({
             "banner_android": "",
             "banner_ios": "",
@@ -358,23 +390,18 @@ class AdmobConfigManageView(APIView):
 
     @transaction.atomic
     def post(self, request):
-        # अगर is_active=True आ रहा है तो पहले बाकी सबको inactive कर दो
         if request.data.get('is_active'):
             AdmobConfig.objects.filter(is_active=True).update(is_active=False)
 
-        # मौजूदा active config ढूंढो
         existing = AdmobConfig.objects.filter(is_active=True).first()
 
         if existing:
-            # अपडेट मोड
             serializer = AdmobConfigSerializer(existing, data=request.data, partial=True)
         else:
-            # नया बनाओ
             serializer = AdmobConfigSerializer(data=request.data)
 
         if serializer.is_valid():
             instance = serializer.save()
-            # हमेशा active रखो अगर यूजर ने चुना है (सुरक्षा)
             if request.data.get('is_active') is not False:
                 instance.is_active = True
                 instance.save(update_fields=['is_active'])
