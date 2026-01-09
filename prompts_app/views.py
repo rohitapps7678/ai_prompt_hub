@@ -331,3 +331,53 @@ class AdmobConfigView(APIView):
         }
 
         return Response(test_config, status=status.HTTP_200_OK)
+
+class AdmobConfigManageView(APIView):
+    """
+    GET: मौजूदा active config दिखाता है
+    POST: नया config बनाता है या मौजूदा active को अपडेट करता है
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        config = AdmobConfig.objects.filter(is_active=True).first()
+        if config:
+            serializer = AdmobConfigSerializer(config)
+            return Response(serializer.data)
+        return Response({
+            "banner_android": "",
+            "banner_ios": "",
+            "interstitial_android": "",
+            "interstitial_ios": "",
+            "rewarded_android": "",
+            "rewarded_ios": "",
+            "app_open_android": "",
+            "app_open_ios": "",
+            "is_active": False
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request):
+        # अगर is_active=True आ रहा है तो पहले बाकी सबको inactive कर दो
+        if request.data.get('is_active'):
+            AdmobConfig.objects.filter(is_active=True).update(is_active=False)
+
+        # मौजूदा active config ढूंढो
+        existing = AdmobConfig.objects.filter(is_active=True).first()
+
+        if existing:
+            # अपडेट मोड
+            serializer = AdmobConfigSerializer(existing, data=request.data, partial=True)
+        else:
+            # नया बनाओ
+            serializer = AdmobConfigSerializer(data=request.data)
+
+        if serializer.is_valid():
+            instance = serializer.save()
+            # हमेशा active रखो अगर यूजर ने चुना है (सुरक्षा)
+            if request.data.get('is_active') is not False:
+                instance.is_active = True
+                instance.save(update_fields=['is_active'])
+            return Response(AdmobConfigSerializer(instance).data, status=status.HTTP_200_OK)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
