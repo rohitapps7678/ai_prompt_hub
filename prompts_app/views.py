@@ -1,19 +1,19 @@
-# prompts_app/views.py - OPTIMIZED VERSION
+# prompts_app/views.py - OPTIMIZED VERSION with Pagination
 
 from rest_framework import generics, permissions
 from rest_framework.views import APIView
-from rest_framework import status   # ← ADD THIS LINE
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination   # ← NEW
 from django.db import models, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from datetime import timedelta
 
-# FIX #1: Django cache framework
 from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 from django.core.cache import cache
@@ -32,16 +32,31 @@ User = get_user_model()
 CACHE_TTL = 60 * 5  # 5 minutes
 
 
+# ─── NEW: Custom Paginator ────────────────────────────────────────────────────
+class PromptPagination(PageNumberPagination):
+    page_size = 15                          # pehli baar 15 load honge
+    page_size_query_param = 'page_size'     # Flutter ?page_size=20 bhi kar sakta hai
+    max_page_size = 50
+    page_query_param = 'page'              # ?page=2, ?page=3 ...
+
+    def get_paginated_response(self, data):
+        return Response({
+            'count':    self.page.paginator.count,   # total prompts
+            'next':     self.get_next_link(),         # null if last page
+            'previous': self.get_previous_link(),
+            'results':  data,
+        })
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 # ===================== PUBLIC APIs =====================
 
 class CategoryList(generics.ListAPIView):
-    # FIX #2: prefetch_related so prompts_count doesn't N+1
     queryset = Category.objects.prefetch_related('prompts').order_by('order')
     serializer_class = CategorySerializer
     permission_classes = [AllowAny]
 
     def list(self, request, *args, **kwargs):
-        # FIX #3: Cache category list — it barely changes
         cache_key = 'category_list'
         cached = cache.get(cache_key)
         if cached:
@@ -69,9 +84,9 @@ class CategoryList(generics.ListAPIView):
 class PromptList(generics.ListAPIView):
     serializer_class = PromptSerializer
     permission_classes = [AllowAny]
+    pagination_class = PromptPagination          # ← PAGINATION ENABLE
 
     def get_queryset(self):
-        # FIX #4: select_related avoids extra JOIN per prompt
         queryset = (
             Prompt.objects
             .select_related('category')
@@ -96,36 +111,55 @@ class PromptList(generics.ListAPIView):
         device_id = request.query_params.get('device_id', '')
         category  = request.query_params.get('category', 'all') or 'all'
         search    = request.query_params.get('search', '')
+        page      = request.query_params.get('page', '1')
 
-        # FIX #5: Cache per-category (but NOT per-device, so is_liked handled below)
-        cache_key = f'prompts_{category}_{search}'
-        cached_data = cache.get(cache_key)
+        # Cache sirf page=1 ke liye (first load fast)
+        # Search results cache nahi honge
+        cache_key = f'prompts_{category}_{search}_p{page}' if not search else None
 
-        if cached_data is None:
-            queryset = self.filter_queryset(self.get_queryset())
-            serializer = self.get_serializer(
-                queryset, many=True,
-                context={'device_id': device_id},
-            )
-            cached_data = serializer.data
-            # Don't cache search results (too varied); cache category pages
-            if not search:
-                cache.set(cache_key, cached_data, CACHE_TTL)
+        if cache_key:
+            cached = cache.get(cache_key)
+            if cached:
+                # is_liked inject karo cache se bhi
+                if device_id:
+                    import copy
+                    cached = copy.deepcopy(cached)
+                    liked_ids = set(
+                        PromptLike.objects
+                        .filter(device_id=device_id)
+                        .values_list('prompt_id', flat=True)
+                    )
+                    for p in cached.get('results', []):
+                        p['is_liked'] = str(p['id']) in {str(i) for i in liked_ids}
+                return Response(cached)
 
-        # FIX #6: Inject is_liked per-device after cache fetch (fast set lookup)
-        if device_id and cached_data:
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Pagination apply karo
+        page_obj = self.paginate_queryset(queryset)
+        serializer = self.get_serializer(
+            page_obj, many=True,
+            context={'device_id': device_id},
+        )
+        data = serializer.data
+
+        # is_liked inject (live, non-cached)
+        if device_id:
             liked_ids = set(
                 PromptLike.objects
                 .filter(device_id=device_id)
                 .values_list('prompt_id', flat=True)
             )
-            # Mutate a copy so cached object stays clean
-            import copy
-            cached_data = copy.deepcopy(cached_data)
-            for p in cached_data:
+            for p in data:
                 p['is_liked'] = str(p['id']) in {str(i) for i in liked_ids}
 
-        return Response(cached_data)
+        response = self.get_paginated_response(data)
+
+        # Cache karo (search ke liye nahi)
+        if cache_key:
+            cache.set(cache_key, response.data, CACHE_TTL)
+
+        return response
 
 
 class PromptDetail(generics.RetrieveAPIView):
@@ -136,7 +170,6 @@ class PromptDetail(generics.RetrieveAPIView):
 
     def retrieve(self, request, *args, **kwargs):
         prompt = self.get_object()
-        # FIX #7: Use F() expression — no race condition on usage_count
         Prompt.objects.filter(pk=prompt.pk).update(
             usage_count=models.F('usage_count') + 1
         )
@@ -201,12 +234,12 @@ class LikeToggle(APIView):
             liked = True
 
         like_count = prompt.likes.count()
-        # FIX #8: Save only like_count field, not full object
         Prompt.objects.filter(pk=prompt.pk).update(like_count=like_count)
 
-        # Invalidate cache so next list call reflects new count
-        cache.delete(f'prompts_{prompt.category.slug}_')
-        cache.delete('prompts_all_')
+        # Invalidate all pages of this category
+        for i in range(1, 20):
+            cache.delete(f'prompts_{prompt.category.slug}__p{i}')
+            cache.delete(f'prompts_all__p{i}')
 
         return Response({"liked": liked, "like_count": like_count})
 
@@ -221,9 +254,9 @@ class PromptCreateView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         instance = serializer.save()
-        # Bust cache for affected category
-        cache.delete(f'prompts_{instance.category.slug}_')
-        cache.delete('prompts_all_')
+        # Invalidate page 1 cache on new prompt
+        cache.delete(f'prompts_{instance.category.slug}__p1')
+        cache.delete('prompts_all__p1')
         cache.delete('category_list')
 
 
@@ -231,13 +264,13 @@ class PromptUpdateView(generics.UpdateAPIView):
     queryset = Prompt.objects.all()
     serializer_class = PromptSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = [JSONParser, MultiPartParser, FormParser]
     lookup_field = 'pk'
 
     def perform_update(self, serializer):
         instance = serializer.save()
-        cache.delete(f'prompts_{instance.category.slug}_')
-        cache.delete('prompts_all_')
+        for i in range(1, 20):
+            cache.delete(f'prompts_{instance.category.slug}__p{i}')
+            cache.delete(f'prompts_all__p{i}')
 
 
 class PromptDeleteView(generics.DestroyAPIView):
@@ -246,8 +279,9 @@ class PromptDeleteView(generics.DestroyAPIView):
     lookup_field = 'pk'
 
     def perform_destroy(self, instance):
-        cache.delete(f'prompts_{instance.category.slug}_')
-        cache.delete('prompts_all_')
+        for i in range(1, 20):
+            cache.delete(f'prompts_{instance.category.slug}__p{i}')
+            cache.delete(f'prompts_all__p{i}')
         cache.delete('category_list')
         instance.delete()
 
