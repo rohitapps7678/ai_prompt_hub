@@ -1,10 +1,8 @@
 import os
-os.environ['CLOUDINARY_URL'] = 'cloudinary://863392175587377:VdAkiy1vlskR1P5a1wRENTrETqI@dno44x2cr'
-
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
-import dj_database_url   # <-- ADD THIS
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -64,7 +62,7 @@ WSGI_APPLICATION = 'ai_prompt_hub.wsgi.application'
 
 
 # ============================
-# 🔥 POSTGRES DATABASE (FINAL)
+# DATABASE
 # ============================
 
 if config("DATABASE_URL", default=None):
@@ -83,6 +81,33 @@ else:
     }
 
 
+# ============================
+# CACHE — views.py ke liye zaroori
+# ============================
+
+REDIS_URL = config('REDIS_URL', default=None)
+
+if REDIS_URL:
+    # Production: Render/Railway pe Redis add karo, REDIS_URL env var set karo
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+else:
+    # Local development: in-memory cache (server restart pe clear ho jata hai)
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "ai-prompt-hub-cache",
+        }
+    }
+
+
+# ============================
+# AUTH
+# ============================
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -91,12 +116,23 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+
+# ============================
+# REST FRAMEWORK
+# ============================
+
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
-    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 50
+    'PAGE_SIZE': 50,
 }
 
 SIMPLE_JWT = {
@@ -105,22 +141,47 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
 }
 
+
+# ============================
+# CORS
+# ============================
+
 CORS_ALLOW_ALL_ORIGINS = True
+
+
+# ============================
+# LOCALISATION
+# ============================
+
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
 USE_TZ = True
 
+
+# ============================
+# STATIC FILES
+# ============================
+
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 
+
+# ============================
+# CLOUDINARY — .env se lo, hardcode mat karo
+# ============================
+
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': 'dno44x2cr',
-    'API_KEY': '863392175587377',
-    'API_SECRET': 'VdAkiy1vlskR1P5a1wRENTrETqI'
+    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY':    config('CLOUDINARY_API_KEY'),
+    'API_SECRET': config('CLOUDINARY_API_SECRET'),
 }
+
+# ============================
+# MISC
+# ============================
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
