@@ -18,9 +18,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    'cloudinary_storage',
-    'cloudinary',
-
     'rest_framework',
     'rest_framework_simplejwt',
     'django_filters',
@@ -169,16 +166,29 @@ MEDIA_URL = '/media/'
 
 
 # ============================
-# CLOUDINARY — .env se lo, hardcode mat karo
+# CLOUDFLARE R2 — .env se lo, hardcode mat karo
 # ============================
+# R2 ek S3-compatible object storage hai. Media (image/video) seedha
+# browser se R2 mein presigned URL ke through upload hota hai — Django
+# sirf presigned URL generate karta hai, file bytes Django se nahi guzarte.
 
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+R2_ACCOUNT_ID        = config('R2_ACCOUNT_ID')
+R2_ACCESS_KEY_ID     = config('R2_ACCESS_KEY_ID')
+R2_SECRET_ACCESS_KEY = config('R2_SECRET_ACCESS_KEY')
+R2_BUCKET_NAME       = config('R2_BUCKET_NAME')
+R2_ENDPOINT_URL      = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY':    config('CLOUDINARY_API_KEY'),
-    'API_SECRET': config('CLOUDINARY_API_SECRET'),
-}
+# Public URL jisse uploaded files browser mein serve honge.
+# Ya to R2.dev wala default domain use karo, ya apna custom domain
+# (Cloudflare dashboard -> R2 -> bucket -> Settings -> Custom Domain / Public Access)
+# Example: "https://pub-xxxxxxxx.r2.dev"  ya  "https://media.yourdomain.com"
+R2_PUBLIC_URL = config('R2_PUBLIC_URL').rstrip('/')
+
+# Kitni der tak presigned upload URL valid rahega (seconds)
+R2_PRESIGN_EXPIRY = 300
+
+# Max upload size jo backend allow karega (bytes) — video ke liye zyada rakha
+R2_MAX_UPLOAD_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB
 
 # ============================
 # MISC

@@ -30,7 +30,12 @@ class PromptSerializer(serializers.ModelSerializer):
         max_length=500
     )
 
-    like_count = serializers.IntegerField(source='likes.count', read_only=True)
+    # `like_count` is expected to come from an annotation
+    # (`.annotate(like_count=Count('likes'))`) on the queryset — reading it
+    # this way costs ZERO extra queries. Falling back to `likes.count()`
+    # (the old `source='likes.count'`) issues one extra SQL query PER ROW,
+    # which is a classic N+1 and the single biggest slowdown on list views.
+    like_count = serializers.IntegerField(read_only=True, default=0)
     is_liked = serializers.SerializerMethodField()
 
     class Meta:
@@ -43,6 +48,15 @@ class PromptSerializer(serializers.ModelSerializer):
         ]
 
     def get_is_liked(self, obj):
+        # `liked_ids` is a single precomputed set passed in via context by
+        # the view (one query total for the whole page). Checking set
+        # membership here is O(1) and issues no additional DB queries,
+        # unlike the old `obj.likes.filter(device_id=...).exists()` which
+        # ran one query per prompt in the list.
+        liked_ids = self.context.get('liked_ids')
+        if liked_ids is not None:
+            return obj.id in liked_ids
+        # Fallback for single-object views that didn't pass liked_ids.
         device_id = self.context.get('device_id')
         if device_id:
             return obj.likes.filter(device_id=device_id).exists()

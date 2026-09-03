@@ -26,6 +26,7 @@ from .serializers import (
     AdCreateSerializer,
     AdmobConfigSerializer,
 )
+from .r2_storage import create_presigned_upload, delete_object, key_from_public_url, R2UploadError
 
 User = get_user_model()
 
@@ -90,7 +91,11 @@ class PromptList(generics.ListAPIView):
         queryset = (
             Prompt.objects
             .select_related('category')
-            .prefetch_related('likes')
+            # `annotate(like_count=Count(...))` computes the count for
+            # every row in ONE query (SQL GROUP BY) instead of the old
+            # `prefetch_related('likes')` + `source='likes.count'` combo,
+            # which still issued a separate COUNT query per row.
+            .annotate(like_count=models.Count('likes'))
             .order_by('-created_at')
         )
 
@@ -120,39 +125,43 @@ class PromptList(generics.ListAPIView):
         if cache_key:
             cached = cache.get(cache_key)
             if cached:
-                # is_liked inject karo cache se bhi
+                # Cached response has no is_liked baked in (it's
+                # device-specific) — inject it with one query, in-place,
+                # no per-row query and no need to touch the like_count.
                 if device_id:
                     import copy
                     cached = copy.deepcopy(cached)
                     liked_ids = set(
                         PromptLike.objects
-                        .filter(device_id=device_id)
+                        .filter(device_id=device_id, prompt_id__in=[p['id'] for p in cached.get('results', [])])
                         .values_list('prompt_id', flat=True)
                     )
+                    liked_ids_str = {str(i) for i in liked_ids}
                     for p in cached.get('results', []):
-                        p['is_liked'] = str(p['id']) in {str(i) for i in liked_ids}
+                        p['is_liked'] = str(p['id']) in liked_ids_str
                 return Response(cached)
 
         queryset = self.filter_queryset(self.get_queryset())
 
         # Pagination apply karo
         page_obj = self.paginate_queryset(queryset)
-        serializer = self.get_serializer(
-            page_obj, many=True,
-            context={'device_id': device_id},
-        )
-        data = serializer.data
 
-        # is_liked inject (live, non-cached)
+        # One single query for the whole page's liked status, instead of
+        # one query per prompt. Passed into the serializer via context so
+        # get_is_liked() is a pure in-memory set lookup.
+        liked_ids = set()
         if device_id:
             liked_ids = set(
                 PromptLike.objects
-                .filter(device_id=device_id)
+                .filter(device_id=device_id, prompt_id__in=[p.id for p in page_obj])
                 .values_list('prompt_id', flat=True)
             )
-            for p in data:
-                p['is_liked'] = str(p['id']) in {str(i) for i in liked_ids}
 
+        serializer = self.get_serializer(
+            page_obj, many=True,
+            context={'device_id': device_id, 'liked_ids': liked_ids},
+        )
+        data = serializer.data
         response = self.get_paginated_response(data)
 
         # Cache karo (search ke liye nahi)
@@ -163,7 +172,11 @@ class PromptList(generics.ListAPIView):
 
 
 class PromptDetail(generics.RetrieveAPIView):
-    queryset = Prompt.objects.select_related('category').prefetch_related('likes')
+    queryset = (
+        Prompt.objects
+        .select_related('category')
+        .annotate(like_count=models.Count('likes'))
+    )
     serializer_class = PromptSerializer
     lookup_field = 'pk'
     permission_classes = [AllowAny]
@@ -173,9 +186,17 @@ class PromptDetail(generics.RetrieveAPIView):
         Prompt.objects.filter(pk=prompt.pk).update(
             usage_count=models.F('usage_count') + 1
         )
+        device_id = request.query_params.get('device_id')
+        liked_ids = set()
+        if device_id:
+            liked_ids = set(
+                PromptLike.objects
+                .filter(device_id=device_id, prompt_id=prompt.pk)
+                .values_list('prompt_id', flat=True)
+            )
         serializer = self.get_serializer(
             prompt,
-            context={'device_id': request.query_params.get('device_id')},
+            context={'device_id': device_id, 'liked_ids': liked_ids},
         )
         return Response(serializer.data)
 
@@ -190,9 +211,24 @@ class FavouriteListCreate(generics.ListCreateAPIView):
         device_id = self.request.query_params.get('device_id')
         if not device_id:
             return Prompt.objects.none()
-        return Prompt.objects.filter(
-            favourite__device_id=device_id
-        ).select_related('category')
+        return (
+            Prompt.objects
+            .filter(favourite__device_id=device_id)
+            .select_related('category')
+            .annotate(like_count=models.Count('likes'))
+        )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        device_id = self.request.query_params.get('device_id')
+        if device_id:
+            context['device_id'] = device_id
+            context['liked_ids'] = set(
+                PromptLike.objects
+                .filter(device_id=device_id)
+                .values_list('prompt_id', flat=True)
+            )
+        return context
 
     def perform_create(self, serializer):
         device_id = self.request.data.get('device_id')
@@ -284,6 +320,63 @@ class PromptDeleteView(generics.DestroyAPIView):
             cache.delete(f'prompts_all__p{i}')
         cache.delete('category_list')
         instance.delete()
+
+
+# ===================== MEDIA (CLOUDFLARE R2) =====================
+
+class MediaPresignView(APIView):
+    """
+    POST /api/admin/media/presign/
+    body: { "filename": "photo.jpg", "content_type": "image/jpeg", "size_bytes": 123456 }
+
+    Returns a short-lived presigned PUT URL the admin panel uploads
+    the raw file to directly, plus the public URL to store on the prompt.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        filename = request.data.get('filename')
+        content_type = request.data.get('content_type')
+        size_bytes = request.data.get('size_bytes')
+
+        if not filename or not content_type:
+            return Response({"error": "filename and content_type are required"}, status=400)
+
+        try:
+            size_bytes = int(size_bytes) if size_bytes is not None else None
+        except (TypeError, ValueError):
+            size_bytes = None
+
+        try:
+            result = create_presigned_upload(filename, content_type, size_bytes)
+        except R2UploadError as e:
+            return Response({"error": str(e)}, status=400)
+
+        return Response(result)
+
+
+class MediaDeleteView(APIView):
+    """
+    POST /api/admin/media/delete/
+    body: { "url": "https://.../prompts/xxxx.jpg" }
+
+    Optional cleanup helper — call this when replacing/removing media
+    so old files don't pile up in the bucket.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        url = request.data.get('url')
+        key = key_from_public_url(url) if url else None
+        if not key:
+            return Response({"error": "Unrecognized or missing url"}, status=400)
+
+        try:
+            delete_object(key)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+        return Response({"success": True})
 
 
 # ===================== CATEGORY ADMIN VIEWS =====================

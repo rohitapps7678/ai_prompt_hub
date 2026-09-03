@@ -34,12 +34,21 @@ class Prompt(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            # Speeds up: filter(category=...).order_by('-created_at')
+            models.Index(fields=['category', '-created_at'], name='prompt_cat_created_idx'),
+            # Speeds up the default (all-categories) feed ordering.
+            models.Index(fields=['-created_at'], name='prompt_created_idx'),
+        ]
+
     def __str__(self):
         return self.title
 
 
 class Favourite(models.Model):
-    device_id = models.CharField(max_length=255)
+    device_id = models.CharField(max_length=255, db_index=True)
     prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -48,7 +57,7 @@ class Favourite(models.Model):
 
 
 class PromptLike(models.Model):
-    device_id = models.CharField(max_length=255)
+    device_id = models.CharField(max_length=255, db_index=True)
     prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name='likes')
     created_at = models.DateTimeField(auto_now_add=True)
 

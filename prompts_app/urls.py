@@ -21,18 +21,18 @@ urlpatterns = [
     path('ads/active/', views.ActiveAdsView.as_view(), name='active-ads'),
     path('admob-config/', views.AdmobConfigPublicView.as_view(), name='admob-config-public'),
     path('admob-config/admin/', views.AdmobConfigAdminView.as_view(), name='admob-config-admin'),
-    # prompts_app/urls.py (end mein add kar do)
 
     path('admin/ads/activate-banner/', views.activate_banner_ad),
     path('admin/ads/activate-video/', views.activate_video_ad),
-    # prompts_app/urls.py (add this line)
-
     path('admin/ads/deactivate/', views.deactivate_ad, name='deactivate-ad'),
-    # Add this line
     path('admin/change-credentials/', views.change_admin_credentials, name='change-credentials'),
 
     # Admin Only - Categories
     path('admin/categories/create/', views.CategoryCreateView.as_view(), name='category-create'),
     path('admin/categories/<uuid:id>/update/', views.CategoryUpdateView.as_view(), name='category-update'),
     path('admin/categories/<uuid:id>/delete/', views.CategoryDeleteView.as_view(), name='category-delete'),
+
+    # Cloudflare R2 media upload (image + video) — replaces Cloudinary flow
+    path('admin/media/presign/', views.MediaPresignView.as_view(), name='media-presign'),
+    path('admin/media/delete/', views.MediaDeleteView.as_view(), name='media-delete'),
 ]

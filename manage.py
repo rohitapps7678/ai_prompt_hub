@@ -1,7 +1,15 @@
 import os
-os.environ.setdefault("CLOUDINARY_URL", "cloudinary://863392175587377:VdAkiy1vlskR1P5a1wRENTrETqI@dno44x2cr")
-
 import sys
+
+# CLOUDINARY_URL (and every other secret) must come from the environment
+# or a .env file — never hardcode credentials in source control.
+# Example .env entry:
+#   CLOUDINARY_URL=cloudinary://<key>:<secret>@<cloud_name>
+try:
+    from decouple import config
+    os.environ.setdefault("CLOUDINARY_URL", config("CLOUDINARY_URL", default=""))
+except ImportError:
+    pass
 
 if __name__ == '__main__':
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ai_prompt_hub.settings')
