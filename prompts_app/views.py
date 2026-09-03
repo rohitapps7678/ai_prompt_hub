@@ -91,11 +91,8 @@ class PromptList(generics.ListAPIView):
         queryset = (
             Prompt.objects
             .select_related('category')
-            # `annotate(like_count=Count(...))` computes the count for
-            # every row in ONE query (SQL GROUP BY) instead of the old
-            # `prefetch_related('likes')` + `source='likes.count'` combo,
-            # which still issued a separate COUNT query per row.
-            .annotate(like_count=models.Count('likes'))
+            # like_count comes straight from the model's own stored column
+            # (see PromptSerializer) — no annotate/prefetch needed for it.
             .order_by('-created_at')
         )
 
@@ -172,11 +169,7 @@ class PromptList(generics.ListAPIView):
 
 
 class PromptDetail(generics.RetrieveAPIView):
-    queryset = (
-        Prompt.objects
-        .select_related('category')
-        .annotate(like_count=models.Count('likes'))
-    )
+    queryset = Prompt.objects.select_related('category')
     serializer_class = PromptSerializer
     lookup_field = 'pk'
     permission_classes = [AllowAny]
@@ -215,7 +208,6 @@ class FavouriteListCreate(generics.ListCreateAPIView):
             Prompt.objects
             .filter(favourite__device_id=device_id)
             .select_related('category')
-            .annotate(like_count=models.Count('likes'))
         )
 
     def get_serializer_context(self):

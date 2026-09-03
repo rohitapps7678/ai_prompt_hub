@@ -30,12 +30,12 @@ class PromptSerializer(serializers.ModelSerializer):
         max_length=500
     )
 
-    # `like_count` is expected to come from an annotation
-    # (`.annotate(like_count=Count('likes'))`) on the queryset — reading it
-    # this way costs ZERO extra queries. Falling back to `likes.count()`
-    # (the old `source='likes.count'`) issues one extra SQL query PER ROW,
-    # which is a classic N+1 and the single biggest slowdown on list views.
-    like_count = serializers.IntegerField(read_only=True, default=0)
+    # `like_count` is a real, denormalized column on the Prompt model
+    # (kept in sync by LikeToggle whenever someone likes/unlikes). Reading
+    # it directly — instead of the old `source='likes.count'`, which
+    # recomputed the count from the PromptLike table on every single row —
+    # costs zero extra queries and is faster than even a Count() annotation,
+    # since it's just a plain column, no JOIN/GROUP BY needed.
     is_liked = serializers.SerializerMethodField()
 
     class Meta:
