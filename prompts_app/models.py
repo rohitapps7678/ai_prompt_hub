@@ -89,7 +89,37 @@ class Ad(models.Model):
         return f"{self.title} ({self.ad_type})"
 
 
-# ── NAYA MODEL ADMOB CONFIGURATION KE LIYE ────────────────────────────────
+# ── NAYA MODEL: "Follow Us" social/channel links (admin se editable) ──────
+class SocialLink(models.Model):
+    PLATFORM_CHOICES = [
+        ('telegram', 'Telegram'),
+        ('youtube', 'YouTube'),
+        ('instagram', 'Instagram'),
+        ('whatsapp', 'WhatsApp'),
+        ('facebook', 'Facebook'),
+        ('twitter', 'Twitter / X'),
+        ('discord', 'Discord'),
+        ('website', 'Website'),
+        ('other', 'Other'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES, default='other')
+    title = models.CharField(max_length=100, help_text="e.g. 'Follow on Telegram'")
+    subtitle = models.CharField(max_length=100, blank=True, help_text="e.g. '@idea2success'")
+    url = models.URLField(max_length=500)
+    order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order', 'created_at']
+
+    def __str__(self):
+        return f"{self.title} ({self.platform})"
+
+
 class AdmobConfig(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     

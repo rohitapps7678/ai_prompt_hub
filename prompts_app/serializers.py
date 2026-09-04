@@ -1,7 +1,7 @@
 # prompts_app/serializers.py - COMPLETE FIXED VERSION
 
 from rest_framework import serializers
-from .models import Category, Prompt, PromptLike, Ad, AdmobConfig
+from .models import Category, Prompt, PromptLike, Ad, AdmobConfig, SocialLink
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -81,6 +81,13 @@ class AdCreateSerializer(serializers.ModelSerializer):
         if ad_type == 'video' and not data.get('video_url'):
             raise serializers.ValidationError("video_url is required for video ads")
         return data
+
+
+# ── "Follow Us" social/channel links ───────────────────────────────────────
+class SocialLinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SocialLink
+        fields = ['id', 'platform', 'title', 'subtitle', 'url', 'order', 'is_active']
 
 
 # 🔥 FIXED ADMOB CONFIG SERIALIZER - YEH HI PROBLEM THI 🔥

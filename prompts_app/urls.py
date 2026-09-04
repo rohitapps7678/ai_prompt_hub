@@ -8,6 +8,7 @@ urlpatterns = [
     path('categories/', views.CategoryList.as_view(), name='category-list'),
     path('prompts/', views.PromptList.as_view(), name='prompt-list'),
     path('prompts/<uuid:pk>/', views.PromptDetail.as_view(), name='prompt-detail'),
+    path('social-links/', views.SocialLinkPublicList.as_view(), name='social-links-public'),
 
     # Device-based Features
     path('favourites/', views.FavouriteListCreate.as_view(), name='favourite-list'),
@@ -31,6 +32,10 @@ urlpatterns = [
     path('admin/categories/create/', views.CategoryCreateView.as_view(), name='category-create'),
     path('admin/categories/<uuid:id>/update/', views.CategoryUpdateView.as_view(), name='category-update'),
     path('admin/categories/<uuid:id>/delete/', views.CategoryDeleteView.as_view(), name='category-delete'),
+
+    # Admin Only - Social Links ("Follow Us" channels)
+    path('admin/social-links/', views.SocialLinkAdminList.as_view(), name='social-link-admin-list'),
+    path('admin/social-links/<uuid:pk>/', views.SocialLinkAdminDetail.as_view(), name='social-link-admin-detail'),
 
     # Cloudflare R2 media upload (image + video) — replaces Cloudinary flow
     path('admin/media/presign/', views.MediaPresignView.as_view(), name='media-presign'),

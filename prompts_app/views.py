@@ -18,13 +18,14 @@ from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 from django.core.cache import cache
 
-from .models import Category, Prompt, Favourite, PromptLike, Ad, AdmobConfig
+from .models import Category, Prompt, Favourite, PromptLike, Ad, AdmobConfig, SocialLink
 from .serializers import (
     CategorySerializer,
     PromptSerializer,
     AdSerializer,
     AdCreateSerializer,
     AdmobConfigSerializer,
+    SocialLinkSerializer,
 )
 from .r2_storage import create_presigned_upload, delete_object, key_from_public_url, R2UploadError
 
@@ -574,3 +575,49 @@ class AdmobConfigAdminView(APIView):
             })
 
         return Response({"success": False, "errors": serializer.errors}, status=400)
+
+
+# ===================== SOCIAL LINKS ("Follow Us") =====================
+
+class SocialLinkPublicList(generics.ListAPIView):
+    """Public: only active links, in admin-chosen order. Used by the Flutter app's Follow screen."""
+    queryset = SocialLink.objects.filter(is_active=True).order_by('order', 'created_at')
+    serializer_class = SocialLinkSerializer
+    permission_classes = [AllowAny]
+
+    def list(self, request, *args, **kwargs):
+        cache_key = 'social_links_active'
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
+
+        data = self.get_serializer(self.get_queryset(), many=True).data
+        cache.set(cache_key, data, CACHE_TTL)
+        return Response(data)
+
+
+class SocialLinkAdminList(generics.ListCreateAPIView):
+    """Admin: list every link (active + inactive) and create new ones."""
+    queryset = SocialLink.objects.all().order_by('order', 'created_at')
+    serializer_class = SocialLinkSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save()
+        cache.delete('social_links_active')
+
+
+class SocialLinkAdminDetail(generics.RetrieveUpdateDestroyAPIView):
+    """Admin: edit or delete a single link."""
+    queryset = SocialLink.objects.all()
+    serializer_class = SocialLinkSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'pk'
+
+    def perform_update(self, serializer):
+        serializer.save()
+        cache.delete('social_links_active')
+
+    def perform_destroy(self, instance):
+        cache.delete('social_links_active')
+        instance.delete()
